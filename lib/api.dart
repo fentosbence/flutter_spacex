@@ -1,9 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_spacex/data_model.dart';
 import 'package:http/http.dart' as http;
-
 
 class Api {
   Future<List<Launch>> fetchLaunches() async {
@@ -37,5 +35,13 @@ class Api {
     return await Future.wait([
       for (var id in launch.payloadIds) fetchPayload(id),
     ]);
+  }
+}
+
+class MockApi extends Api {
+  @override
+  Future<List<Launch>> fetchLaunches() {
+    // TODO: implement fetchLaunches
+    return super.fetchLaunches();
   }
 }

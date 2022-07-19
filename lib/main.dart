@@ -1,13 +1,45 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_spacex/data_model.dart';
-
 
 import 'package:flutter_spacex/payload.dart';
 import 'package:flutter_spacex/view/mylist_widget.dart';
 
 import 'api.dart';
+
+class LaunchesViewModel extends ChangeNotifier {
+  List<Launch> _launches = [];
+  List<PayloadViewModel> _payloads = [];
+
+  final Api api;
+
+  LaunchesViewModel({required this.api});
+
+  List<Launch> get launches => _launches;
+
+  List<PayloadViewModel> get payloads => _payloads;
+
+  Future<void> loadAllLaunches() async {
+    _launches = await api.fetchLaunches();
+    _payloads = List.generate(
+      _launches.length,
+      (index) => PayloadViewModel(null, LoadingState.loading),
+    );
+    notifyListeners();
+  }
+
+  Future<void> loadPayloadForLaunchAt(int index) async {
+    final launch = _launches[index];
+    PayloadViewModel model = _payloads[index];
+
+    if (model.state == LoadingState.content) return;
+
+    final data = await Api().fetchPayloads(launch);
+    model.payload = data;
+    model.state = LoadingState.content;
+
+    notifyListeners();
+  }
+}
 
 void main() => runApp(
       const MaterialApp(home: MyApp()),
@@ -21,78 +53,35 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late Future<List<Launch>> launchListFuture;
-  late List<PayloadViewModel> payloads;
+  final _model = LaunchesViewModel(api: MockApi());
 
   @override
   void initState() {
     super.initState();
-    launchListFuture = Api().fetchLaunches();
-    payloads = <PayloadViewModel>[];
-  }
-
-  Future<void> _loadPayloadForLaunchAt(int index, List<Launch> launches) async {
-    final launch = launches[index];
-    PayloadViewModel model = payloads[index];
-
-    if (model.state == LoadingState.content) return;
-
-    final data = await Api().fetchPayloads(launch);
-
-    model.payload = data;
-    model.state = LoadingState.content;
-    setState(() {
-      print("done");
-    });
+    _model.loadAllLaunches();
+    _model.addListener(_updateContents);
   }
 
   @override
-  Widget build(BuildContext context){
+  void dispose() {
+    super.dispose();
+    _model.removeListener(_updateContents);
+  }
+
+  void _updateContents() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("SpaceX Launches"),
       ),
-      body: FutureBuilder<List<Launch>>(
-        future: launchListFuture,
-        builder: (BuildContext context, snapshot) {
-          if (snapshot.hasData) {
-            payloads = List.generate(snapshot.data!.length,
-                    (index) => PayloadViewModel(null, LoadingState.loading));
-            return Data(
-              snapshot.data!,
-              payloads,
-              child: MyListWidget(
-                launches: snapshot.data!,
-                onLaunchDetailsExpanded: (index) =>
-                    _loadPayloadForLaunchAt(index, snapshot.data!),
-              ),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return Container(
-              color: Colors.red,
-            );
-          }
-          return Container(
-            color: Colors.blue,
-          );
-        },
+      body: MyListWidget(
+        launches: _model.launches,
+        payloads: _model.payloads,
+        onLaunchDetailsExpanded: (index) =>
+            _model.loadPayloadForLaunchAt(index),
       ),
     );
   }
-}
-
-class Data extends InheritedWidget {
-  final List<Launch> launches;
-  List<PayloadViewModel> payloadModel;
-
-  Data(this.launches, this.payloadModel, {Key? key, required super.child})
-      : super(key: key);
-
-  @override
-  bool updateShouldNotify(covariant Data oldWidget) =>
-      oldWidget.payloadModel != payloadModel;
-
-  static Data of(context) => context.dependOnInheritedWidgetOfExactType<Data>();
 }

@@ -3,16 +3,15 @@ import 'package:flutter_spacex/data_model.dart';
 import 'package:flutter_spacex/view/details_page.dart';
 import 'package:flutter_spacex/view/payload_details.dart';
 
-import 'package:flutter_spacex/main.dart';
 import 'package:flutter_spacex/payload.dart';
 
 class MyListWidget extends StatefulWidget {
   final List<Launch> launches;
+  final List<PayloadViewModel> payloads;
   final ValueChanged<int> onLaunchDetailsExpanded;
 
-
   const MyListWidget(
-      {required this.launches, required this.onLaunchDetailsExpanded, Key? key})
+      {required this.launches, required this.onLaunchDetailsExpanded, Key? key, required this.payloads})
       : super(key: key);
 
   @override
@@ -30,12 +29,10 @@ class MyListState extends State<MyListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    Data data = Data.of(context);
     return ListView.builder(
       shrinkWrap: true,
       itemCount: widget.launches.length,
       itemBuilder: (context, index) {
-        Data data = Data.of(context);
         return Padding(
           padding: const EdgeInsets.only(left: 4.0, right: 4.0, bottom: 4),
           child: ExpansionTile(
@@ -52,7 +49,7 @@ class MyListState extends State<MyListWidget> {
                   children: [
                     PayloadDetails(
                       key: PageStorageKey<int>(index),
-                      payloadModel: data.payloadModel[index],
+                      payloadModel: widget.payloads[index],
                     ),
                     TextButton(
                       onPressed: () {
@@ -60,8 +57,8 @@ class MyListState extends State<MyListWidget> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => DetailsPage(
-                              title: data.launches[index].name,
-                              payloadModel: data.payloadModel[index],
+                              title: widget.launches[index].name,
+                              payloadModel: widget.payloads[index],
                             ),
                           ),
                         );
