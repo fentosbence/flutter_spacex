@@ -1,91 +1,81 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_spacex/dataModel.dart';
+import 'package:flutter_spacex/data_model.dart';
 
-import 'package:http/http.dart' as http;
+
+import 'package:flutter_spacex/payload.dart';
+import 'package:flutter_spacex/view/mylist_widget.dart';
+
+import 'api.dart';
 
 void main() => runApp(
-      MaterialApp(home: MyApp()),
+      const MaterialApp(home: MyApp()),
     );
 
 class MyApp extends StatefulWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
-  State<MyApp> createState() => _MyStatefulWidgetState();
+  State<MyApp> createState() => _MyAppState();
 }
 
-class _MyStatefulWidgetState extends State<MyApp> {
-  late Future<List<Launch>> launchList;
+class _MyAppState extends State<MyApp> {
+  late Future<List<Launch>> launchListFuture;
+  late List<PayloadViewModel> payloads;
 
   @override
   void initState() {
     super.initState();
-    launchList = fetchLaunches();
+    launchListFuture = Api().fetchLaunches();
+    payloads = <PayloadViewModel>[];
   }
 
-  Future<List<Launch>> fetchLaunches() async {
-    final response =
-        await http.get(Uri.parse('https://api.spacexdata.com/v4/launches'));
+  Future<void> _loadPayloadForLaunchAt(int index, List<Launch> launches) async {
+    final launch = launches[index];
+    PayloadViewModel model = payloads[index];
 
-    if (response.statusCode == 200) {
-      // If the server did return a 200 OK response,
-      // then parse the JSON.
-      final parsed = json.decode(response.body).cast<Map<String, dynamic>>();
-      return parsed.map<Launch>((json) => Launch.fromJson(json)).toList();
-    } else {
-      // If the server did not return a 200 OK response,
-      // then throw an exception.
-      throw Exception('Failed to load launches');
-    }
+    if (model.state == LoadingState.content) return;
+
+    final data = await Api().fetchPayloads(launch);
+
+    model.payload = data;
+    model.state = LoadingState.content;
+    setState(() {
+      print("done");
+    });
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context){
     return Scaffold(
       appBar: AppBar(
-        title: Text("SpaceX Launches"),
+        title: const Text("SpaceX Launches"),
       ),
       body: FutureBuilder<List<Launch>>(
-        future: launchList,
+        future: launchListFuture,
         builder: (BuildContext context, snapshot) {
-          List<Widget> children;
           if (snapshot.hasData) {
-            children = <Widget>[
-              Expanded(
-                  child: MyListWidget(
+            payloads = List.generate(snapshot.data!.length,
+                    (index) => PayloadViewModel(null, LoadingState.loading));
+            return Data(
+              snapshot.data!,
+              payloads,
+              child: MyListWidget(
                 launches: snapshot.data!,
-              )),
-            ];
-          } else if (snapshot.hasError) {
-            children = <Widget>[
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 60,
+                onLaunchDetailsExpanded: (index) =>
+                    _loadPayloadForLaunchAt(index, snapshot.data!),
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Text('Error: ${snapshot.error}'),
-              )
-            ];
-          } else {
-            children = const <Widget>[
-              SizedBox(
-                width: 60,
-                height: 60,
-                child: CircularProgressIndicator(),
-              ),
-              Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: Text('Awaiting result...'),
-              )
-            ];
+            );
           }
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: children,
-            ),
+
+          if (snapshot.hasError) {
+            return Container(
+              color: Colors.red,
+            );
+          }
+          return Container(
+            color: Colors.blue,
           );
         },
       ),
@@ -93,120 +83,16 @@ class _MyStatefulWidgetState extends State<MyApp> {
   }
 }
 
-class MyListWidget extends StatefulWidget {
+class Data extends InheritedWidget {
   final List<Launch> launches;
+  List<PayloadViewModel> payloadModel;
 
-  const MyListWidget({required this.launches});
+  Data(this.launches, this.payloadModel, {Key? key, required super.child})
+      : super(key: key);
 
   @override
-  State<StatefulWidget> createState() => MyListState(launches);
-}
+  bool updateShouldNotify(covariant Data oldWidget) =>
+      oldWidget.payloadModel != payloadModel;
 
-class MyListState extends State<MyListWidget> {
-  late Map<Launch, bool> isFavourite;
-
-  final List<Launch> launches;
-
-  MyListState(this.launches) {
-    isFavourite = {for (var item in launches) item: false};
-  }
-
-  Future<List<Payload>> fetchPayloads(List<String> ids) async {
-    return await Future.wait([
-      for (var id in ids) fetchPayload(id),
-    ]);
-  }
-
-  Future<Payload> fetchPayload(String id) async {
-    final response =
-        await http.get(Uri.parse('https://api.spacexdata.com/v4/payloads/$id'));
-
-    if (response.statusCode == 200) {
-      // If the server did return a 200 OK response,
-      // then parse the JSON.
-      final parsed = json.decode(response.body);
-      return Payload.fromJson(parsed);
-    } else {
-      // If the server did not return a 200 OK response,
-      // then throw an exception.
-      throw Exception('Failed to load payloads');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: launches.length,
-      itemBuilder: (context, index) {
-        return Padding(
-            padding: const EdgeInsets.only(left: 4.0, right: 4.0, bottom: 4),
-            child: ExpansionTile(
-              title: Row(
-                children: [
-                  const SizedBox(
-                      height: 50,
-                      width: 50,
-                      child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: CircleAvatar(
-                          child: Icon(Icons.rocket_launch),
-                        ),
-                      )),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          launches[index].name,
-                        ),
-                        Text(launches[index].date.toString()),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: isFavourite[launches[index]] == true
-                        ? Icon(Icons.favorite)
-                        : Icon(Icons.favorite_border),
-                    onPressed: () {
-                      setState(() {
-                        isFavourite[launches[index]] =
-                            isFavourite[launches[index]] == false
-                                ? true
-                                : false;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              children: [
-                FutureBuilder<List<Payload>>(
-                  future: fetchPayloads(launches[index].payloadIds),
-                  builder: (BuildContext context, snapshot) {
-                    print(snapshot.data![0].type);
-                    if (snapshot.hasError) {
-                      return Text('Még mindig nem jó');
-                    } else if (snapshot.hasData) {
-                      return Container(
-                        height: 100,
-                        child: ListView.builder(
-                            itemCount: snapshot.data!.length,
-                            itemBuilder: (context, i) {
-                              var list = fetchPayloads(launches[i].payloadIds);
-                              return ListTile(
-                                leading: Text(snapshot.data![i].name),
-                                trailing: Text(snapshot.data![i].type),
-                              );
-                            }),
-                      );
-                    } else {
-                      return Text('Még nincs érték');
-                    }
-                    return Text('Még mindig szar ez a fos');
-                  },
-                ),
-              ],
-            ));
-      },
-    );
-  }
+  static Data of(context) => context.dependOnInheritedWidgetOfExactType<Data>();
 }
